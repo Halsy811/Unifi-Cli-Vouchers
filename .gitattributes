@@ -1,0 +1,20 @@
+# Go-специфичные файлы — всегда LF
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Также рекомендуется для других текстовых файлов
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+
+# Бинарные файлы помечаем явно
+*.png binary
+*.jpg binary
+*.pdf binary
