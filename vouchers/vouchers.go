@@ -1,0 +1,197 @@
+package vouchers
+
+import (
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"strings"
+	"time"
+)
+
+var (
+	httpClient       http.Client
+	NameNoteVouchers string
+)
+
+const (
+	baseURL           = "https://unifi:8443" // ########## Сделать изменяемым
+	loginURL          = baseURL + "/api/login"
+	getVoucherURL     = baseURL + "/api/s/default/stat/voucher"
+	CreateVauchersURL = baseURL + "/api/s/default/cmd/hotspot"
+)
+
+type Voucher struct {
+	Duration       int    `json:"duration"`
+	Note           string `json:"note"`
+	Qos_overwrite  bool   `json:"qos_overwrite"`
+	For_hotspot    bool   `json:"for_hotspot"`
+	Code           string `json:"code"`
+	Create_time    int64  `json:"create_time"`
+	Quota          int    `json:"quota"`
+	Site_id        string `json:"site_id"`
+	External_id    string `json:"external_id"`
+	Id             string `json:"_id"`
+	Admin_name     string `json:"admin_name"`
+	Used           int    `json:"used"`
+	Status         string `json:"status"`
+	Status_expires int    `json:"status_expires"`
+}
+
+type VoucherResponse struct {
+	Meta struct {
+		RC string `json:"rc"`
+	} `json:"meta"`
+	Data []Voucher `json:"data"`
+}
+
+// Специальная функция которая выполняется перед main
+func init() {
+	// Игнорировать ошибки SSL (для самоподписанных сертификатов UniFi)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	jar, _ := cookiejar.New(nil)
+	httpClient = http.Client{
+		Transport: tr,
+		Jar:       jar, // создаёт "банку" (jar) для cookies
+	}
+}
+
+// Создать сессию. Login
+func Login(login, password string) {
+
+	loginData := map[string]string{
+		"username": login,
+		"password": password,
+	}
+
+	loginBody, _ := json.Marshal(loginData) // Преобразование в JSON
+
+	req, err := http.NewRequest("POST", loginURL, bytes.NewBuffer(loginBody))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Ошибка авторизации: %s\n", resp.Status)
+		return
+	}
+
+	// (опционально) вывести ответ
+	// body, _ := io.ReadAll(resp.Body)
+	// fmt.Println(string(body))
+	fmt.Println("Успешный вход в UniFi Controller")
+}
+
+// Запросить список всех ваучеров
+func GetVauchers() {
+	req, err := http.NewRequest("GET", getVoucherURL, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// (опционально) прочитать и вывести ответ
+	// body, _ := io.ReadAll(resp.Body)
+	// fmt.Println(string(body))
+}
+
+// GetAPIVouchers возвращает только ваучеры с note, начинающейся с "API-created-*"
+func GetFilterNoteVauchers(NameNoteVouchers string) []Voucher {
+	req, err := http.NewRequest("GET", getVoucherURL, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	var vr VoucherResponse
+	if err := json.Unmarshal(body, &vr); err != nil {
+		panic(err)
+	}
+
+	if vr.Meta.RC != "ok" {
+		fmt.Println("Ошибка в ответе UniFi:", string(body))
+		return nil
+	}
+
+	// Фильтрация
+	var filtered []Voucher
+	for _, v := range vr.Data {
+		if strings.HasPrefix(v.Note, NameNoteVouchers) {
+			filtered = append(filtered, v)
+		}
+	}
+
+	return filtered
+
+	// (опционально) прочитать и вывести ответ
+	// body, _ := io.ReadAll(resp.Body)
+	// fmt.Println(string(body))
+}
+
+func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) string {
+
+	now := time.Now()
+	dateTime := now.Format("2006-01-02-15-04-05-")
+	nanosecStr := fmt.Sprintf("%09d", now.Nanosecond())
+	uniqueStr := strings.ReplaceAll(dateTime+nanosecStr, "-", "")
+
+	// Тело запроса
+	NameNoteVouchers := "API-created-" + uniqueStr
+	payload := map[string]interface{}{
+		"cmd":    "create-voucher",
+		"expire": ttl,
+		"n":      count,
+		"quota":  1,
+		"note":   NameNoteVouchers,
+		"up":     uploadSpeed,
+		"down":   downloadSpeed,
+	}
+	body, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest("POST", CreateVauchersURL, bytes.NewBuffer(body))
+	if err != nil {
+		panic(err)
+	}
+	// Заголовки
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// Вывод результата
+	// buf := new(bytes.Buffer)
+	// buf.ReadFrom(resp.Body)
+	// fmt.Printf("Status: %s\nResponse:\n%s\n", resp.Status, buf.String())
+
+	return NameNoteVouchers
+}

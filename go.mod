@@ -1,4 +1,4 @@
-module unifi-cli
+module unifi-cli-vouchers
 
 go 1.25.4
 
