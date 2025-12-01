@@ -15,7 +15,7 @@ import (
 
 var (
 	httpClient http.Client
-	baseURL    string = "https://unifi:8443"
+	baseURL    string
 )
 
 var (
@@ -71,7 +71,7 @@ func SetServerURL(server string, port int) {
 }
 
 // Создать сессию. Login
-func Login(login, password string) {
+func Login(login, password string) error {
 
 	loginData := map[string]string{
 		"username": login,
@@ -82,73 +82,78 @@ func Login(login, password string) {
 
 	req, err := http.NewRequest("POST", loginURL, bytes.NewBuffer(loginBody))
 	if err != nil {
-		panic(err)
+		log.Printf("Не удалось сформировать запрос авторизации. Ошибка: %s\n", err)
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		panic(err)
+		log.Printf("Ошибка выполнения запроса на сервер: %s\n", err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Ошибка авторизации: %s\n", resp.Status)
-		return
+		err := fmt.Errorf("Ошибка авторизации: %s\n", resp.Status)
+		log.Println(err)
+		return err
 	}
 
 	// (опционально) вывести ответ
 	// body, _ := io.ReadAll(resp.Body)
 	// log.Println(string(body))
 	log.Println("Успешный вход в UniFi Controller")
+
+	return nil
 }
 
 // Запросить список всех ваучеров
-func GetVauchers() {
-	req, err := http.NewRequest("GET", getVoucherURL, nil)
-	if err != nil {
-		panic(err)
-	}
+// func GetVauchers() {
+// 	req, err := http.NewRequest("GET", getVoucherURL, nil)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
+// 	resp, err := httpClient.Do(req)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	defer resp.Body.Close()
 
-	// (опционально) прочитать и вывести ответ
-	// body, _ := io.ReadAll(resp.Body)
-	// log.Println(string(body))
-}
+// 	// (опционально) прочитать и вывести ответ
+// 	// body, _ := io.ReadAll(resp.Body)
+// 	// log.Println(string(body))
+// }
 
 // GetAPIVouchers возвращает только ваучеры с note, начинающейся с "API-created-*"
 func GetFilterNoteVauchers(NameNoteVouchers string) ([]Voucher, error) {
 	req, err := http.NewRequest("GET", getVoucherURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, fmt.Errorf("Не удалось создать запрос: %w", err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка HTTP-запроса: %w", err)
+		return nil, fmt.Errorf("Ошибка HTTP-запроса: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("сервер вернул статус: %d", resp.StatusCode)
+		return nil, fmt.Errorf("Сервер вернул статус: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка чтения тела ответа: %w", err)
+		return nil, fmt.Errorf("Ошибка чтения тела ответа: %w", err)
 	}
 
 	var vr VoucherResponse
 	if err := json.Unmarshal(body, &vr); err != nil {
-		return nil, fmt.Errorf("ошибка парсинга JSON: %w", err)
+		return nil, fmt.Errorf("Ошибка парсинга JSON: %w", err)
 	}
 
 	if vr.Meta.RC != "ok" {
-		return nil, fmt.Errorf("ошибка UniFi API: %s", string(body))
+		return nil, fmt.Errorf("Ошибка UniFi API: %s", string(body))
 	}
 
 	// Фильтрация
@@ -166,7 +171,7 @@ func GetFilterNoteVauchers(NameNoteVouchers string) ([]Voucher, error) {
 	// log.Println(string(body))
 }
 
-func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) string {
+func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) (string, error) {
 
 	now := time.Now()
 	dateTime := now.Format("2006-01-02-15-04-05-")
@@ -188,16 +193,18 @@ func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) string {
 
 	req, err := http.NewRequest("POST", CreateVauchersURL, bytes.NewBuffer(body))
 	if err != nil {
-		panic(err)
+		log.Printf("Ошибка при формировании запроса на создание ваучеров: %s\n", err)
+		return "", err
 	}
 	// Заголовки
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		panic(err)
+		log.Printf("Ошибка при запросе на сервер: %s\n", err)
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	return NameNoteVouchers
+	return NameNoteVouchers, nil
 }

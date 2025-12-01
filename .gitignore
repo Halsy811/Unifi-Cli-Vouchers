@@ -1,0 +1,32 @@
+# Бинарные файлы
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+__debug_bin
+
+# Тестовые файлы
+*.test
+*.out
+*.prof
+
+# Коэффициент покрытия
+coverage.txt
+coverage.html
+*.coverprofile
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Локальные настройки
+.env
+.env.local

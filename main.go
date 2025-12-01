@@ -28,9 +28,7 @@ type Output struct {
 }
 
 func main() {
-	// Перенаправляем логи в stderr
 	log.SetOutput(os.Stderr)
-
 	flag.Parse()
 
 	vouchers.SetServerURL(*flsgServer, *flsgPort)
@@ -53,14 +51,23 @@ func main() {
 
 	creds := auth.Get_auth()
 
-	vouchers.Login(creds.Username, creds.Password)
+	err := vouchers.Login(creds.Username, creds.Password)
+	if err != nil {
+		os.Exit(1)
+	}
 
-	nameVouch := vouchers.CreateVauchers(*flagCountVouch, *flagTTLVouch, *flagUpSpeedVouch, *flagDownSpeedVouch)
+	nameVouch, err := vouchers.CreateVauchers(*flagCountVouch, *flagTTLVouch, *flagUpSpeedVouch, *flagDownSpeedVouch)
+	if err != nil {
+		os.Exit(1)
+	}
 	// log.Printf("Искомое имя: %s\n", nameVouch)
 
 	vouchersList, err := vouchers.GetFilterNoteVauchers(nameVouch)
 	if err != nil {
-		log.Println("Ошибка:", err)
+		os.Exit(1)
+	}
+
+	if err != nil {
 		result := Output{
 			Success: false,
 			Error:   err.Error(),
@@ -81,6 +88,5 @@ func main() {
 	// 	log.Printf("Ваучер: %s, заметка: %s, статус: %s\n", v.Code, v.Note, v.Status)
 	// }
 
-	os.Exit(0)
 	// ############## Убрать все panic, вывод ошибкок в json
 }
