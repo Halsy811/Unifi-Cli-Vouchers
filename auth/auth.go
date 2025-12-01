@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"syscall"
 
@@ -43,10 +44,10 @@ func Unreg_auth() {
 	errUsername := keyring.Delete(keyringNameService, keyringKeyUsername)
 	errPassword := keyring.Delete(keyringNameService, keyringKeyPasswrd)
 	if errUsername != nil && errPassword != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка удаления учетных данных из хранилища: \n\tЛогин(%v) \n\tПароль(%v)\n", errUsername, errPassword)
+		log.Printf("Ошибка удаления учетных данных из хранилища: \n\tЛогин(%v) \n\tПароль(%v)\n", errUsername, errPassword)
 		os.Exit(1)
 	} else {
-		fmt.Println("Учетные данные удалены их хранилища системы")
+		log.Println("Учетные данные удалены их хранилища системы")
 	}
 }
 
@@ -57,12 +58,12 @@ func Get_auth() *Credentials {
 
 	password, errPassword := keyring.Get(keyringNameService, keyringKeyPasswrd)
 	if errUsername != nil || errPassword != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка при получении учетных данных:\n")
+		log.Printf("Ошибка при получении учетных данных:\n")
 		if errUsername != nil {
-			fmt.Fprintf(os.Stderr, "\tЛогин: %v\n", errUsername)
+			log.Printf("\tЛогин: %v\n", errUsername)
 		}
 		if errPassword != nil {
-			fmt.Fprintf(os.Stderr, "\tПароль: %v\n", errPassword)
+			log.Printf("\tПароль: %v\n", errPassword)
 		}
 		os.Exit(1)
 	}

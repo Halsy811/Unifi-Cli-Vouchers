@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -13,12 +14,15 @@ import (
 )
 
 var (
-	httpClient       http.Client
+	httpClient http.Client
+	baseURL    string = "https://unifi:8443"
+)
+
+var (
 	NameNoteVouchers string
 )
 
-const (
-	baseURL           = "https://unifi:8443" // ########## Сделать изменяемым
+var (
 	loginURL          = baseURL + "/api/login"
 	getVoucherURL     = baseURL + "/api/s/default/stat/voucher"
 	CreateVauchersURL = baseURL + "/api/s/default/cmd/hotspot"
@@ -62,6 +66,10 @@ func init() {
 	}
 }
 
+func SetServerURL(server string, port int) {
+	baseURL = fmt.Sprintf("https://%s:%d", server, port)
+}
+
 // Создать сессию. Login
 func Login(login, password string) {
 
@@ -84,14 +92,14 @@ func Login(login, password string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Ошибка авторизации: %s\n", resp.Status)
+		log.Printf("Ошибка авторизации: %s\n", resp.Status)
 		return
 	}
 
 	// (опционально) вывести ответ
 	// body, _ := io.ReadAll(resp.Body)
-	// fmt.Println(string(body))
-	fmt.Println("Успешный вход в UniFi Controller")
+	// log.Println(string(body))
+	log.Println("Успешный вход в UniFi Controller")
 }
 
 // Запросить список всех ваучеров
@@ -109,35 +117,38 @@ func GetVauchers() {
 
 	// (опционально) прочитать и вывести ответ
 	// body, _ := io.ReadAll(resp.Body)
-	// fmt.Println(string(body))
+	// log.Println(string(body))
 }
 
 // GetAPIVouchers возвращает только ваучеры с note, начинающейся с "API-created-*"
-func GetFilterNoteVauchers(NameNoteVouchers string) []Voucher {
+func GetFilterNoteVauchers(NameNoteVouchers string) ([]Voucher, error) {
 	req, err := http.NewRequest("GET", getVoucherURL, nil)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("ошибка HTTP-запроса: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("сервер вернул статус: %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("ошибка чтения тела ответа: %w", err)
 	}
 
 	var vr VoucherResponse
 	if err := json.Unmarshal(body, &vr); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("ошибка парсинга JSON: %w", err)
 	}
 
 	if vr.Meta.RC != "ok" {
-		fmt.Println("Ошибка в ответе UniFi:", string(body))
-		return nil
+		return nil, fmt.Errorf("ошибка UniFi API: %s", string(body))
 	}
 
 	// Фильтрация
@@ -148,11 +159,11 @@ func GetFilterNoteVauchers(NameNoteVouchers string) []Voucher {
 		}
 	}
 
-	return filtered
+	return filtered, nil
 
 	// (опционально) прочитать и вывести ответ
 	// body, _ := io.ReadAll(resp.Body)
-	// fmt.Println(string(body))
+	// log.Println(string(body))
 }
 
 func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) string {
@@ -187,11 +198,6 @@ func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) string {
 		panic(err)
 	}
 	defer resp.Body.Close()
-
-	// Вывод результата
-	// buf := new(bytes.Buffer)
-	// buf.ReadFrom(resp.Body)
-	// fmt.Printf("Status: %s\nResponse:\n%s\n", resp.Status, buf.String())
 
 	return NameNoteVouchers
 }
