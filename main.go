@@ -13,9 +13,9 @@ var (
 	flagRegAuth        = flag.Bool("r", false, "Зарегистрировать учетные данные в системном хранилище")
 	flagDelAuth        = flag.Bool("d", false, "Удалить учетные данные в системном хранилище")
 	flagCountVouch     = flag.Int("c", 1, "Количество создаваемых ваучеров")
-	flagTTLVouch       = flag.Int("t", 60, "Время дуйствия ваучера")
-	flagUpSpeedVouch   = flag.Int("up", 1024, "Скорость отдачи для ваучера")
-	flagDownSpeedVouch = flag.Int("down", 1024, "Скорость загрузки для ваучера")
+	flagTTLVouch       = flag.Int("t", 60, "Время дуйствия ваучера (0 - Unlimited)")
+	flagUpSpeedVouch   = flag.Int("up", 1024, "Скорость отдачи для ваучера (0 - Unlimited)")
+	flagDownSpeedVouch = flag.Int("down", 1024, "Скорость загрузки для ваучера (0 - Unlimited)")
 	flsgServer         = flag.String("s", "unifi", "Сервер")
 	flsgPort           = flag.Int("p", 8443, "Порт сервера")
 )
@@ -25,6 +25,26 @@ type Output struct {
 	Message string             `json:"message,omitempty"`
 	Error   string             `json:"error,omitempty"`
 	Data    []vouchers.Voucher `json:"data,omitempty"`
+}
+
+func result(vouchersList []vouchers.Voucher, err error) {
+	if err != nil {
+		result := Output{
+			Success: false,
+			Error:   err.Error(),
+		}
+		json.NewEncoder(os.Stdout).Encode(result)
+		return
+	} else {
+		result := Output{
+			Success: true,
+			Data:    vouchersList,
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
+			log.Printf("Не удалось закодировать ответ в JSON: %v", err)
+			os.Exit(1)
+		}
+	}
 }
 
 func main() {
@@ -51,42 +71,22 @@ func main() {
 
 	creds := auth.Get_auth()
 
+	// Login
 	err := vouchers.Login(creds.Username, creds.Password)
 	if err != nil {
-		os.Exit(1)
+		result(nil, err)
+		return
 	}
 
+	// Create
 	nameVouch, err := vouchers.CreateVauchers(*flagCountVouch, *flagTTLVouch, *flagUpSpeedVouch, *flagDownSpeedVouch)
 	if err != nil {
-		os.Exit(1)
+		result(nil, err)
+		return
 	}
-	// log.Printf("Искомое имя: %s\n", nameVouch)
 
+	// Filter
 	vouchersList, err := vouchers.GetFilterNoteVauchers(nameVouch)
-	if err != nil {
-		os.Exit(1)
-	}
+	result(vouchersList, err)
 
-	if err != nil {
-		result := Output{
-			Success: false,
-			Error:   err.Error(),
-		}
-		json.NewEncoder(os.Stdout).Encode(result)
-		os.Exit(1)
-	} else {
-		result := Output{
-			Success: true,
-			Data:    vouchersList,
-		}
-		if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
-			log.Printf("Не удалось закодировать ответ в JSON: %v", err)
-			os.Exit(1)
-		}
-	}
-	// for _, v := range vouchersList {
-	// 	log.Printf("Ваучер: %s, заметка: %s, статус: %s\n", v.Code, v.Note, v.Status)
-	// }
-
-	// ############## Убрать все panic, вывод ошибкок в json
 }

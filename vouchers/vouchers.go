@@ -15,7 +15,6 @@ import (
 
 var (
 	httpClient http.Client
-	baseURL    string
 )
 
 var (
@@ -23,9 +22,10 @@ var (
 )
 
 var (
-	loginURL          = baseURL + "/api/login"
-	getVoucherURL     = baseURL + "/api/s/default/stat/voucher"
-	CreateVauchersURL = baseURL + "/api/s/default/cmd/hotspot"
+	baseURL           string
+	loginURL          string
+	getVoucherURL     string
+	CreateVauchersURL string
 )
 
 type Voucher struct {
@@ -68,6 +68,9 @@ func init() {
 
 func SetServerURL(server string, port int) {
 	baseURL = fmt.Sprintf("https://%s:%d", server, port)
+	loginURL = baseURL + "/api/login"
+	getVoucherURL = baseURL + "/api/s/default/stat/voucher"
+	CreateVauchersURL = baseURL + "/api/s/default/cmd/hotspot"
 }
 
 // Создать сессию. Login
@@ -82,20 +85,21 @@ func Login(login, password string) error {
 
 	req, err := http.NewRequest("POST", loginURL, bytes.NewBuffer(loginBody))
 	if err != nil {
-		log.Printf("Не удалось сформировать запрос авторизации. Ошибка: %s\n", err)
+		err := fmt.Errorf("Не удалось сформировать запрос авторизации. Ошибка: %s\n", err)
 		return err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.Printf("Ошибка выполнения запроса на сервер: %s\n", err)
+		err := fmt.Errorf("Ошибка выполнения запроса на сервер: %s\n", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		err := fmt.Errorf("Ошибка авторизации: %s\n", resp.Status)
-		log.Println(err)
 		return err
 	}
 
@@ -164,14 +168,15 @@ func GetFilterNoteVauchers(NameNoteVouchers string) ([]Voucher, error) {
 		}
 	}
 
-	return filtered, nil
+	if len(filtered) == 0 {
+		err := fmt.Errorf("На сервере не найдено ваучеров с именем '%s'", NameNoteVouchers)
+		return nil, err
+	}
 
-	// (опционально) прочитать и вывести ответ
-	// body, _ := io.ReadAll(resp.Body)
-	// log.Println(string(body))
+	return filtered, nil
 }
 
-func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) (string, error) {
+func CreateVauchers(count, ttl, upLoadSpeed, downLoadSpeed int) (string, error) {
 
 	now := time.Now()
 	dateTime := now.Format("2006-01-02-15-04-05-")
@@ -183,25 +188,38 @@ func CreateVauchers(count, ttl, uploadSpeed, downloadSpeed int) (string, error) 
 	payload := map[string]interface{}{
 		"cmd":    "create-voucher",
 		"expire": ttl,
-		"n":      count,
 		"quota":  1,
 		"note":   NameNoteVouchers,
-		"up":     uploadSpeed,
-		"down":   downloadSpeed,
 	}
+	if count != 0 {
+		payload["n"] = count
+	} else {
+		err := fmt.Errorf("Передано значение 0 в ключ 'Создать n ваучеров'")
+		return "", err
+	}
+	if ttl != 0 {
+		payload["expire"] = ttl
+	}
+	if upLoadSpeed != 0 {
+		payload["up"] = upLoadSpeed
+	}
+	if downLoadSpeed != 0 {
+		payload["down"] = downLoadSpeed
+	}
+
 	body, _ := json.Marshal(payload)
 
 	req, err := http.NewRequest("POST", CreateVauchersURL, bytes.NewBuffer(body))
 	if err != nil {
-		log.Printf("Ошибка при формировании запроса на создание ваучеров: %s\n", err)
+		err := fmt.Errorf("Ошибка при формировании запроса на создание ваучеров: %s\n", err)
 		return "", err
 	}
-	// Заголовки
+	// + Заголовки
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.Printf("Ошибка при запросе на сервер: %s\n", err)
+		err := fmt.Errorf("Ошибка при запросе на сервер: %s\n", err)
 		return "", err
 	}
 	defer resp.Body.Close()
